@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1350" />
+  <title>ArrowHeart Wardrobe</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a0010;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      font-family: Georgia, serif;
+    }
+
+    /* ── SCENE: the 1350x1080 play area ── */
+    #scene {
+      position: relative;
+      width: 1350px;
+      height: 1080px;
+      overflow: hidden;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    /* Every full-canvas layer image */
+    #scene .layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 1350px;
+      height: 1080px;
+      pointer-events: none;
+    }
+
+    /* Z-index stack — matches your layer order */
+    #layer-bg        { z-index: 1; }
+    #layer-bottoms   { z-index: 2; display: none; }   /* shorts/bottoms — UNDER arms */
+    #layer-under-top { z-index: 3; display: none; }   /* vest/corset/sleeveless — UNDER arms */
+    #layer-arms      { z-index: 4; }                  /* arms — always visible */
+    #layer-over-top  { z-index: 5; display: none; }   /* long sleeve tops — OVER arms */
+    #layer-jacket    { z-index: 6; display: none; }   /* jacket — OVER arms */
+    #layer-necklace  { z-index: 7; display: none; }   /* necklace — over everything */
+    #layer-bag       { z-index: 8; display: none; }   /* bag — over everything */
+    #layer-boots     { z-index: 9; display: none; }   /* boots — over everything */
+
+    /* ── WARDROBE PANEL — sits in the right pink box area ── */
+    #wardrobe {
+      position: absolute;
+      top: 240px;
+      left: 468px;
+      width: 840px;
+      height: 740px;
+      z-index: 20;
+      overflow-y: auto;
+      padding: 20px 24px 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Scrollbar styling */
+    #wardrobe::-webkit-scrollbar { width: 6px; }
+    #wardrobe::-webkit-scrollbar-track { background: transparent; }
+    #wardrobe::-webkit-scrollbar-thumb { background: rgba(220,80,130,0.4); border-radius: 4px; }
+
+    /* Category rows */
+    .category {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .category-label {
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #c0305a;
+      font-weight: bold;
+      text-shadow: 0 1px 3px rgba(255,255,255,0.4);
+      padding-left: 4px;
+    }
+
+    .category-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    /* Individual clothing thumbnails */
+    .clothing-item {
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      cursor: grab;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.55);
+      border: 2px solid rgba(220,100,150,0.3);
+      padding: 6px;
+      transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+      -webkit-user-drag: element;
+    }
+
+    .clothing-item:hover {
+      transform: scale(1.1);
+      border-color: rgba(220,50,100,0.8);
+      box-shadow: 0 4px 16px rgba(220,50,100,0.35);
+    }
+
+    .clothing-item.dragging {
+      opacity: 0.45;
+      cursor: grabbing;
+    }
+
+    .clothing-item.equipped {
+      border-color: #e03278;
+      box-shadow: 0 0 0 3px rgba(224,50,120,0.4);
+      background: rgba(255,200,220,0.6);
+    }
+
+    /* ── RESTART BUTTON — uses your custom PNG ── */
+    #restart-btn {
+      position: absolute;
+      bottom: 28px;
+      left: 28px;
+      z-index: 30;
+      width: 110px;
+      height: auto;
+      cursor: pointer;
+      transition: transform 0.15s, filter 0.15s;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #restart-btn:hover {
+      transform: scale(1.1) rotate(-8deg);
+      filter: brightness(1.15);
+    }
+
+    #restart-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* ── DRAG GHOST: follows cursor ── */
+    #drag-ghost {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      width: 120px;
+      height: 120px;
+      object-fit: contain;
+      display: none;
+      opacity: 0.85;
+      transform: translate(-50%, -50%);
+    }
+
+    /* ── TOOLTIP: shows item name on hover ── */
+    .clothing-item[data-name]:hover::after {
+      content: attr(data-name);
+      position: absolute;
+      bottom: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(180,20,70,0.9);
+      color: white;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .clothing-item { position: relative; }
+  </style>
+</head>
+<body>
+
+<div id="scene">
+
+  <!-- ══ LAYER STACK ══ -->
+  <img id="layer-bg"        class="layer" src="assets/BackgroundTextureFull.png" alt="" />
+  <img id="layer-bottoms"   class="layer" src="" alt="" />
+  <img id="layer-under-top" class="layer" src="" alt="" />
+  <img id="layer-arms"      class="layer" src="assets/FreeArms.png" alt="" />
+  <img id="layer-over-top"  class="layer" src="" alt="" />
+  <img id="layer-jacket"    class="layer" src="" alt="" />
+  <img id="layer-necklace"  class="layer" src="" alt="" />
+  <img id="layer-bag"       class="layer" src="" alt="" />
+  <img id="layer-boots"     class="layer" src="" alt="" />
+
+  <!-- ══ WARDROBE PANEL ══ -->
+  <div id="wardrobe">
+
+    <!-- BOTTOMS (under arms) -->
+    <div class="category">
+      <div class="category-label">Bottoms</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Shorts_2.png"
+             data-layer="bottoms"
+             data-name="Denim Shorts"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/PokerDotShorts.png"
+             data-layer="bottoms"
+             data-name="Polka Dot Shorts"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- UNDER-ARM TOPS (vest, corset — sit under the arms layer) -->
+    <div class="category">
+      <div class="category-label">Tops — Under Arms</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/vest_white_1.png"
+             data-layer="under-top"
+             data-name="White Vest"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/Corset.png"
+             data-layer="under-top"
+             data-name="Silver Corset"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- OVER-ARM TOPS (long sleeve — sit over the arms layer) -->
+    <div class="category">
+      <div class="category-label">Tops — Over Arms</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Long_Sleeve_-Top_Layer_.png"
+             data-layer="over-top"
+             data-name="Long Sleeve Top"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/2Long_Sleeve_-Top_Layer_.png"
+             data-layer="over-top"
+             data-name="Long Sleeve Top 2"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- JACKET (over arms) -->
+    <div class="category">
+      <div class="category-label">Jacket</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Jacket.png"
+             data-layer="jacket"
+             data-name="Jacket"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/Jacket_-_Top_Layer.png"
+             data-layer="jacket"
+             data-name="Jacket Alt"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- SHOES -->
+    <div class="category">
+      <div class="category-label">Shoes</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Boots.png"
+             data-layer="boots"
+             data-name="Brown Boots"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- NECKLACES -->
+    <div class="category">
+      <div class="category-label">Necklaces</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Necklace1.png"
+             data-layer="necklace"
+             data-name="Necklace 1"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/Necklace2.png"
+             data-layer="necklace"
+             data-name="Necklace 2"
+             draggable="true" />
+      </div>
+    </div>
+
+    <!-- BAGS -->
+    <div class="category">
+      <div class="category-label">Bags</div>
+      <div class="category-items">
+        <img class="clothing-item"
+             src="assets/Bag1.png"
+             data-layer="bag"
+             data-name="Red Bag"
+             draggable="true" />
+        <img class="clothing-item"
+             src="assets/Bag2.png"
+             data-layer="bag"
+             data-name="Brown Bag"
+             draggable="true" />
+      </div>
+    </div>
+
+  </div><!-- end #wardrobe -->
+
+  <!-- ══ RESTART BUTTON ══ -->
+  <button id="restart-btn" title="Restart">
+    <img src="assets/Restart_Button.png" alt="Restart" style="width:100%;height:auto;" />
+  </button>
+
+</div><!-- end #scene -->
+
+<!-- Drag ghost image that follows the cursor -->
+<img id="drag-ghost" src="" alt="" />
+
+<script>
+  // ══════════════════════════════════════════════
+  //  LAYER MAP — connects data-layer to layer img
+  // ══════════════════════════════════════════════
+  const LAYER_MAP = {
+    'bottoms'   : document.getElementById('layer-bottoms'),
+    'under-top' : document.getElementById('layer-under-top'),
+    'over-top'  : document.getElementById('layer-over-top'),
+    'jacket'    : document.getElementById('layer-jacket'),
+    'necklace'  : document.getElementById('layer-necklace'),
+    'bag'       : document.getElementById('layer-bag'),
+    'boots'     : document.getElementById('layer-boots'),
+  };
+
+  // Track which item is equipped per layer for toggling
+  const equipped = {
+    'bottoms'   : null,
+    'under-top' : null,
+    'over-top'  : null,
+    'jacket'    : null,
+    'necklace'  : null,
+    'bag'       : null,
+    'boots'     : null,
+  };
+
+  const ghost = document.getElementById('drag-ghost');
+  let draggedEl = null;
+
+  // ══════════════════════════════════════════════
+  //  CLICK TO TOGGLE — click a clothing item to
+  //  instantly equip / unequip it
+  // ══════════════════════════════════════════════
+  document.querySelectorAll('.clothing-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const layer = item.dataset.layer;
+      const src   = item.src;
+      const layerEl = LAYER_MAP[layer];
+      if (!layerEl) return;
+
+      if (equipped[layer] === item) {
+        // Already equipped — unequip
+        layerEl.src = '';
+        layerEl.style.display = 'none';
+        item.classList.remove('equipped');
+        equipped[layer] = null;
+      } else {
+        // Unequip previous item in this layer
+        if (equipped[layer]) equipped[layer].classList.remove('equipped');
+        // Equip new item
+        layerEl.src = src;
+        layerEl.style.display = 'block';
+        item.classList.add('equipped');
+        equipped[layer] = item;
+      }
+    });
+  });
+
+  // ══════════════════════════════════════════════
+  //  DRAG AND DROP
+  // ══════════════════════════════════════════════
+  document.querySelectorAll('.clothing-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      draggedEl = item;
+      item.classList.add('dragging');
+
+      // Show ghost image at cursor
+      ghost.src = item.src;
+      ghost.style.display = 'block';
+
+      // Hide default drag ghost
+      const blank = document.createElement('canvas');
+      blank.width = blank.height = 1;
+      e.dataTransfer.setDragImage(blank, 0, 0);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      ghost.style.display = 'none';
+      draggedEl = null;
+    });
+  });
+
+  // Move ghost with cursor
+  document.addEventListener('dragover', e => {
+    e.preventDefault();
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top  = e.clientY + 'px';
+  });
+
+  // Drop anywhere on the scene = equip the item
+  const scene = document.getElementById('scene');
+  scene.addEventListener('dragover', e => { e.preventDefault(); });
+
+  scene.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!draggedEl) return;
+
+    const layer   = draggedEl.dataset.layer;
+    const src     = draggedEl.src;
+    const layerEl = LAYER_MAP[layer];
+    if (!layerEl) return;
+
+    // Unequip previous
+    if (equipped[layer]) equipped[layer].classList.remove('equipped');
+
+    // Equip new
+    layerEl.src = src;
+    layerEl.style.display = 'block';
+    draggedEl.classList.add('equipped');
+    equipped[layer] = draggedEl;
+  });
+
+  // ══════════════════════════════════════════════
+  //  RESTART BUTTON
+  // ══════════════════════════════════════════════
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    // Hide all clothing layers
+    Object.values(LAYER_MAP).forEach(el => {
+      el.src = '';
+      el.style.display = 'none';
+    });
+    // Remove equipped state from all thumbnails
+    document.querySelectorAll('.clothing-item').forEach(el => {
+      el.classList.remove('equipped');
+    });
+    // Clear tracking
+    Object.keys(equipped).forEach(k => equipped[k] = null);
+  });
+</script>
+
+</body>
+</html>
